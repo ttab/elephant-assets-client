@@ -156,6 +156,8 @@ func (p *Provider) fetchVariants(
 			Kind:    v.Kind,
 			Max:     int(v.Max),
 			Fit:     v.Fit,
+			Public:  v.Public,
+			Scopes:  v.Scopes,
 			Classes: v.Classes,
 		}
 	}

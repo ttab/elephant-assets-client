@@ -236,3 +236,84 @@ func TestURLSignerErrors(t *testing.T) {
 		t.Errorf("expected ErrNoActiveKey, got %v", err)
 	}
 }
+
+func testPublicKey(t *testing.T) signing.Key {
+	t.Helper()
+
+	key, err := signing.GenerateKey("pub2026a", signing.KeyUsePublic,
+		time.Now().Add(-time.Hour), time.Now().Add(10*365*24*time.Hour))
+	if err != nil {
+		t.Fatalf("generate public key: %v", err)
+	}
+
+	return key
+}
+
+func TestPublicSignerSignsNonExpiring(t *testing.T) {
+	key := testPublicKey(t)
+
+	signer := assetsclient.PublicSigner{Keys: staticKeys{key: key}}
+
+	signed, err := signer.SignURL(
+		"https://assets.example.com/v1/repo/abc123/0/full/large-wm.jpg",
+		"public")
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	token := mustToken(t, signed)
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 6 {
+		t.Fatalf("expected 6 token fields, got %d: %q", len(parts), token)
+	}
+
+	// Non-expiring and public-tier scope.
+	if parts[2] != signing.ExpNever {
+		t.Errorf("expected exp=%q, got %q", signing.ExpNever, parts[2])
+	}
+
+	if parts[4] != assetsclient.ScopePublic {
+		t.Errorf("expected scope %q, got %q", assetsclient.ScopePublic, parts[4])
+	}
+
+	// Signed with the public key.
+	want, err := key.Signer().SignPrefix(
+		"/v1/repo/abc123/0/full/", "public", assetsclient.ScopePublic,
+		signing.ExpNever)
+	if err != nil {
+		t.Fatalf("reference token: %v", err)
+	}
+
+	if token != want {
+		t.Errorf("token mismatch:\ngot  %q\nwant %q", token, want)
+	}
+}
+
+func TestPublicSignerNeedsPublicKey(t *testing.T) {
+	// Only a delivery key available: the public signer must refuse.
+	signer := assetsclient.PublicSigner{Keys: staticKeys{key: testDeliveryKey(t)}}
+
+	_, err := signer.SignURL(
+		"https://assets.example.com/v1/repo/abc123/0/full/large-wm.jpg",
+		"public")
+	if !errors.Is(err, assetsclient.ErrNoPublicKey) {
+		t.Fatalf("expected ErrNoPublicKey, got: %v", err)
+	}
+}
+
+func mustToken(t *testing.T, signed string) string {
+	t.Helper()
+
+	u, err := url.Parse(signed)
+	if err != nil {
+		t.Fatalf("parse signed URL: %v", err)
+	}
+
+	token := u.Query().Get("s")
+	if token == "" {
+		t.Fatal("expected an s query parameter")
+	}
+
+	return token
+}

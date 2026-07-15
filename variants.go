@@ -28,7 +28,14 @@ type Variant struct {
 	// Fit controls how an image is fitted to the bounding box. Only
 	// "inside" is defined: scale down to fit, never upscale.
 	Fit string
-	// Classes are the access classes the variant belongs to.
+	// Public marks the variant as a public derivative: reachable by any
+	// valid signature and usable with non-expiring (exp=0) tokens.
+	Public bool
+	// Scopes are the named scopes that grant access to the variant.
+	Scopes []string
+	// Classes are the class names available as a {variant}-{class}
+	// suffix, e.g. "wm" makes {variant}-wm a public watermarked
+	// rendition.
 	Classes []string
 }
 

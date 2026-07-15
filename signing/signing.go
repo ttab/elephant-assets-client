@@ -29,7 +29,10 @@ const ExpNever = "0"
 
 var (
 	segmentPattern  = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	audScopePattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+	audiencePattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+	// Scopes allow a leading underscore for the reserved
+	// _all/_public/_original scopes.
+	scopePattern    = regexp.MustCompile(`^[a-z0-9_-]+$`)
 	coordPattern    = regexp.MustCompile(`^\d(\.\d+)?$`)
 	selectorPattern = regexp.MustCompile(
 		`^(full|c(-\d(\.\d+)?){4}|t(-\d+(\.\d{1,3})?){2})$`)
@@ -143,11 +146,11 @@ func (s *Signer) SignPrefix(
 		return "", err
 	}
 
-	if !audScopePattern.MatchString(aud) {
+	if !audiencePattern.MatchString(aud) {
 		return "", fmt.Errorf("invalid audience %q", aud)
 	}
 
-	if !audScopePattern.MatchString(scope) {
+	if !scopePattern.MatchString(scope) {
 		return "", fmt.Errorf("invalid scope %q", scope)
 	}
 

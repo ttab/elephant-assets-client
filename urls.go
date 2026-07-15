@@ -86,6 +86,15 @@ func BuildURL(
 // coverage gap.
 var ErrNoActiveKey = errors.New("no active delivery key")
 
+// ErrNoPublicKey is returned when the key source has no active public key.
+var ErrNoPublicKey = errors.New("no active public key")
+
+// ScopePublic is the scope carried by public (non-expiring) tokens. Public
+// renditions are reachable by any valid signature, so it grants nothing
+// beyond what the exp=0 rule already allows; it labels the public tier in
+// the edge's access logs.
+const ScopePublic = "_public"
+
 // KeysSource provides active signing keys. *KeyProvider implements it;
 // tests can substitute a static source.
 type KeysSource interface {
@@ -195,4 +204,52 @@ func (s *SignSession) SignURL(rawURL string) (string, error) {
 	u.RawQuery = query.Encode()
 
 	return u.String(), nil
+}
+
+// PublicSigner mints permanent (non-expiring, exp=0) tokens for public
+// asset renditions, signed with the public key. The edge serves such a
+// token only for variants the asset service marks public (thumbnails, the
+// -wm watermarked forms); any other variant is rejected. Because the
+// tokens never expire, the URLs can be cached, embedded, or shared
+// indefinitely — a leaked one only ever yields a public rendition.
+//
+// The public key is rotated rarely and deliberately (rotating it
+// invalidates every permanent URL in circulation), so these URLs are
+// stable across ordinary delivery-key rotation.
+type PublicSigner struct {
+	// Keys provides the active public key.
+	Keys KeysSource
+}
+
+// SignURL signs a single public asset CDN URL for an audience. Use
+// NewSession when signing many URLs for one audience.
+func (s *PublicSigner) SignURL(rawURL, aud string) (string, error) {
+	sess, err := s.NewSession(aud)
+	if err != nil {
+		return "", err
+	}
+
+	return sess.SignURL(rawURL)
+}
+
+// NewSession prepares public signing for one audience. Tokens are
+// non-expiring and carry the _public scope; the session caches them per
+// signed prefix like the delivery session. Not safe for concurrent use.
+func (s *PublicSigner) NewSession(aud string) (*SignSession, error) {
+	if !audiencePattern.MatchString(aud) {
+		return nil, fmt.Errorf("invalid audience %q", aud)
+	}
+
+	signer, ok := s.Keys.ActiveSigner(time.Now(), signing.KeyUsePublic)
+	if !ok {
+		return nil, ErrNoPublicKey
+	}
+
+	return &SignSession{
+		signer: signer,
+		aud:    aud,
+		scope:  ScopePublic,
+		exp:    signing.ExpNever,
+		tokens: make(map[string]string),
+	}, nil
 }
