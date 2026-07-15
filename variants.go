@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// VariantOriginal is the reserved variant name addressing the source
+// asset itself: the full source for the "full" selector, or the crop
+// region at native resolution for a crop selector. It is part of the URL
+// contract rather than the configured variant set, and its rendition
+// size is the selector region's own dimensions (SelectorSize).
+const VariantOriginal = "original"
+
 // Variant is a configured rendition variant, as served by the asset
 // service's GetVariants RPC. The asset service owns variant geometry;
 // URL-minting services use it to know which variants exist and to
