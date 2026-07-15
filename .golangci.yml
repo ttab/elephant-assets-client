@@ -1,0 +1,77 @@
+version: "2"
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - dogsled
+    - dupl
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - godot
+    - godox
+    - goheader
+    - gomoddirectives
+    - gomodguard_v2
+    - goprintffuncname
+    - gosec
+    - importas
+    - lll
+    - makezero
+    - misspell
+    - modernize
+    - nakedret
+    - nestif
+    - nilnil
+    - nlreturn
+    - nolintlint
+    - predeclared
+    - promlinter
+    - revive
+    - staticcheck
+    - testpackage
+    - thelper
+    - unconvert
+    - unparam
+    - usetesting
+    - whitespace
+    - wrapcheck
+    - wsl_v5
+  settings:
+    godox:
+      keywords:
+        - FIXME
+        - BUG
+    nestif:
+      min-complexity: 6
+    wrapcheck:
+      extra-ignore-sigs:
+        - (context.Context).Err(
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters: [gosec, goconst]
+        path: _test\.go$
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
