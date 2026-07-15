@@ -26,11 +26,14 @@ the base URL is just scheme, host, and optional port, and only the
   single source of truth for the token format; the asset service imports
   it from here and validates it against the shared edge test vectors.
 - `assetsclient` (module root) — the service-facing client:
-  - `KeyProvider` fetches the signing key set from the asset service's
-    `Keys.GetSigningKeys` RPC (client credentials with the
-    `asset_keys_read` scope), caches it in memory, and refreshes it in
-    the background. Keys are pre-distributed, so signing never waits on
-    the network.
+  - `Provider` fetches the signing key set and the rendition variant
+    configuration from the asset service's `Keys` RPC (client
+    credentials with the `asset_keys_read` scope), caches them in
+    memory, and refreshes them in the background. Keys are
+    pre-distributed, so signing never waits on the network.
+  - `Variant.FitSize` computes rendition size hints from an asset's
+    source dimensions — the asset service owns variant geometry, so
+    clients never hardcode it.
   - `BuildURL` composes unsigned asset CDN URLs from address variables,
     validated against the edge grammar.
   - `URLSigner`/`SignSession` mint delivery tokens for unsigned URLs,
@@ -39,7 +42,7 @@ the base URL is just scheme, host, and optional port, and only the
 ## Usage
 
 ```go
-provider := assetsclient.NewKeyProvider(endpoint, authClient)
+provider := assetsclient.NewProvider(endpoint, authClient)
 go provider.Run(ctx)
 
 signer := assetsclient.URLSigner{
