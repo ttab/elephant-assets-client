@@ -31,6 +31,12 @@ func (s *keysService) GetVariants(
 	return &assets.GetVariantsResponse{Variants: s.variants}, nil
 }
 
+func (s *keysService) SignURL(
+	_ context.Context, _ *assets.SignURLRequest,
+) (*assets.SignURLResponse, error) {
+	return nil, nil //nolint:nilnil // unused debugging RPC, satisfies assets.Keys
+}
+
 func TestKeyProviderRefresh(t *testing.T) {
 	now := time.Now()
 
