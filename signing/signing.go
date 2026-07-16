@@ -35,7 +35,7 @@ var (
 	scopePattern    = regexp.MustCompile(`^[a-z0-9_-]+$`)
 	coordPattern    = regexp.MustCompile(`^\d(\.\d+)?$`)
 	selectorPattern = regexp.MustCompile(
-		`^(full|c(-\d(\.\d+)?){4}|t(-\d+(\.\d{1,3})?){2})$`)
+		`^(full|c(-\d(\.\d+)?){4}((-\d(\.\d+)?){2})?|t(-\d+(\.\d{1,3})?){2})$`)
 )
 
 // ValidSegment reports whether s is a valid namespace, id, or version path
@@ -45,8 +45,9 @@ func ValidSegment(s string) bool {
 }
 
 // ValidSelector reports whether s is a selector the edge grammar accepts:
-// the literal "full", an image soft crop "c-{x}-{y}-{w}-{h}", or a
-// temporal clip "t-{start}-{end}" (spec §4.1).
+// the literal "full", an image soft crop "c-{x}-{y}-{w}-{h}" optionally
+// carrying a focus point "c-{x}-{y}-{w}-{h}-{fx}-{fy}", or a temporal clip
+// "t-{start}-{end}" (spec §4.1).
 func ValidSelector(s string) bool {
 	return selectorPattern.MatchString(s)
 }
@@ -74,6 +75,29 @@ func SoftCrop(x, y, w, h string) (Crop, error) {
 
 	return Crop{
 		selector: "c-" + x + "-" + y + "-" + w + "-" + h,
+	}, nil
+}
+
+// WithFocus returns the crop extended with the document's core/softcrop
+// focus point, verbatim like SoftCrop. The focus anchors the aspect window
+// of fit:cover variants; it is a hint and grants nothing beyond the crop
+// bounds. Only valid on soft crops.
+func (c Crop) WithFocus(fx, fy string) (Crop, error) {
+	if !strings.HasPrefix(c.selector, "c-") || strings.Count(c.selector, "-") != 4 {
+		return Crop{}, fmt.Errorf(
+			"focus points only apply to focus-free soft crops")
+	}
+
+	for _, coord := range []string{fx, fy} {
+		if !coordPattern.MatchString(coord) {
+			return Crop{}, fmt.Errorf(
+				"coordinate %q does not match the crop grammar",
+				coord)
+		}
+	}
+
+	return Crop{
+		selector: c.selector + "-" + fx + "-" + fy,
 	}, nil
 }
 
