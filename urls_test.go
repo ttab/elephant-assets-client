@@ -108,9 +108,8 @@ func TestURLSignerSignURL(t *testing.T) {
 	key := testDeliveryKey(t)
 
 	signer := assetsclient.URLSigner{
-		Keys:  staticKeys{key: key},
-		Scope: "web",
-		TTL:   time.Hour,
+		Keys: staticKeys{key: key},
+		TTL:  time.Hour,
 	}
 
 	signed, err := signer.SignURL(
@@ -131,13 +130,13 @@ func TestURLSignerSignURL(t *testing.T) {
 	}
 
 	parts := strings.Split(token, ".")
-	if len(parts) != 6 {
-		t.Fatalf("expected 6 token fields, got %d: %q", len(parts), token)
+	if len(parts) != 5 {
+		t.Fatalf("expected 5 token fields, got %d: %q", len(parts), token)
 	}
 
 	// Recompute the MAC with the raw key to verify the token contents.
-	want, err := key.Signer().SignPrefix(
-		"/v1/mm/abc123/0/full/", "acme", "web", parts[2])
+	want, err := key.Signer().SignPath(
+		"/v1/mm/abc123/0/full/preview.jpg", "acme", parts[2])
 	if err != nil {
 		t.Fatalf("sign reference token: %v", err)
 	}
@@ -147,11 +146,10 @@ func TestURLSignerSignURL(t *testing.T) {
 	}
 }
 
-func TestSignSessionSharedTokens(t *testing.T) {
+func TestSignSessionPerPathTokens(t *testing.T) {
 	signer := assetsclient.URLSigner{
-		Keys:  staticKeys{key: testDeliveryKey(t)},
-		Scope: "web",
-		TTL:   time.Hour,
+		Keys: staticKeys{key: testDeliveryKey(t)},
+		TTL:  time.Hour,
 	}
 
 	sess, err := signer.NewSession("acme")
@@ -179,29 +177,28 @@ func TestSignSessionSharedTokens(t *testing.T) {
 
 	preview := sign(base + "/full/preview.jpg")
 	thumb := sign(base + "/full/thumbnail.webp")
-	cropped := sign(base + "/c-0.2-0.2-0.5-0.5/preview.jpg")
+	again := sign(base + "/full/preview.jpg")
 
-	if preview != thumb {
-		t.Error("variants of one prefix should share a token")
+	if preview == thumb {
+		t.Error("different renditions must have different tokens")
 	}
 
-	if preview == cropped {
-		t.Error("different selectors must have different tokens")
+	if again != preview {
+		t.Error("re-signing the same path must reuse the token")
 	}
 
-	// The host plays no part in the signed prefix: the same asset path
+	// The host plays no part in the signed path: the same asset path
 	// served through another CDN host signs identically.
 	moved := sign("https://cdn-77.example.net/v1/mm/abc123/0/full/preview.jpg")
 
 	if moved != preview {
-		t.Error("the signed prefix must be host independent")
+		t.Error("the signed path must be host independent")
 	}
 }
 
 func TestURLSignerErrors(t *testing.T) {
 	signer := assetsclient.URLSigner{
-		Keys:  staticKeys{key: testDeliveryKey(t)},
-		Scope: "web",
+		Keys: staticKeys{key: testDeliveryKey(t)},
 	}
 
 	_, err := signer.SignURL(
@@ -225,8 +222,7 @@ func TestURLSignerErrors(t *testing.T) {
 	}
 
 	noKey := assetsclient.URLSigner{
-		Keys:  staticKeys{key: expired},
-		Scope: "web",
+		Keys: staticKeys{key: expired},
 	}
 
 	_, err = noKey.SignURL(
@@ -264,22 +260,17 @@ func TestPublicSignerSignsNonExpiring(t *testing.T) {
 	token := mustToken(t, signed)
 
 	parts := strings.Split(token, ".")
-	if len(parts) != 6 {
-		t.Fatalf("expected 6 token fields, got %d: %q", len(parts), token)
+	if len(parts) != 5 {
+		t.Fatalf("expected 5 token fields, got %d: %q", len(parts), token)
 	}
 
-	// Non-expiring and public-tier scope.
 	if parts[2] != signing.ExpNever {
 		t.Errorf("expected exp=%q, got %q", signing.ExpNever, parts[2])
 	}
 
-	if parts[4] != assetsclient.ScopePublic {
-		t.Errorf("expected scope %q, got %q", assetsclient.ScopePublic, parts[4])
-	}
-
 	// Signed with the public key.
-	want, err := key.Signer().SignPrefix(
-		"/v1/repo/abc123/0/full/", "public", assetsclient.ScopePublic,
+	want, err := key.Signer().SignPath(
+		"/v1/repo/abc123/0/full/large-wm.jpg", "public",
 		signing.ExpNever)
 	if err != nil {
 		t.Fatalf("reference token: %v", err)

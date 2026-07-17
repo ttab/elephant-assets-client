@@ -22,17 +22,20 @@ type Variant struct {
 	Name string
 	// Kind is the asset kind the variant applies to, e.g. "image".
 	Kind string
-	// Max is the bounding box in pixels (longest side) for image
-	// variants.
+	// Max is the bounding box in pixels (longest side) for fit:inside
+	// image variants.
 	Max int
-	// Fit controls how an image is fitted to the bounding box. Only
-	// "inside" is defined: scale down to fit, never upscale.
+	// Width and Height are the fixed output size of fit:cover variants.
+	Width  int
+	Height int
+	// Fit controls how an image is fitted: "inside" scales down into
+	// the max bounding box (never upscaling); "cover" crops to the
+	// width×height aspect around the selector's focus point and scales
+	// to that size.
 	Fit string
-	// Public marks the variant as a public derivative: reachable by any
-	// valid signature and usable with non-expiring (exp=0) tokens.
+	// Public marks the variant as a public derivative: reachable with
+	// non-expiring (exp=0) tokens.
 	Public bool
-	// Scopes are the named scopes that grant access to the variant.
-	Scopes []string
 	// Classes are the class names available as a {variant}-{class}
 	// suffix, e.g. "wm" makes {variant}-wm a public watermarked
 	// rendition.
@@ -75,14 +78,16 @@ func SelectorSize(selector string, srcWidth, srcHeight int) (int, int, bool) {
 		return srcWidth, srcHeight, true
 	}
 
+	// A soft crop has four coordinates, optionally followed by a focus
+	// point, which doesn't affect the region size.
 	parts := strings.Split(selector, "-")
-	if len(parts) != 5 || parts[0] != "c" {
+	if (len(parts) != 5 && len(parts) != 7) || parts[0] != "c" {
 		return 0, 0, false
 	}
 
 	coords := make([]float64, 4)
 
-	for i, part := range parts[1:] {
+	for i, part := range parts[1:5] {
 		v, err := strconv.ParseFloat(part, 64)
 		if err != nil {
 			return 0, 0, false

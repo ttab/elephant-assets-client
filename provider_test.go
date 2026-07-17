@@ -101,14 +101,14 @@ func TestKeyProviderRefresh(t *testing.T) {
 		t.Fatal("expected an active delivery signer")
 	}
 
-	token, err := signer.SignPrefix(
-		"/v1/mm/abc/0/full/", "acme", "web", "1800000000")
+	token, err := signer.SignPath(
+		"/v1/mm/abc/0/full/preview.jpg", "acme", "1800000000")
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
 
-	want, err := signing.NewSigner("2026a", secret).SignPrefix(
-		"/v1/mm/abc/0/full/", "acme", "web", "1800000000")
+	want, err := signing.NewSigner("2026a", secret).SignPath(
+		"/v1/mm/abc/0/full/preview.jpg", "acme", "1800000000")
 	if err != nil {
 		t.Fatalf("sign reference: %v", err)
 	}
@@ -124,8 +124,8 @@ func TestKeyProviderRefresh(t *testing.T) {
 		t.Fatal("expected the upcoming key to become active")
 	}
 
-	futureToken, err := future.SignPrefix(
-		"/v1/mm/abc/0/full/", "acme", "web", "1800000000")
+	futureToken, err := future.SignPath(
+		"/v1/mm/abc/0/full/preview.jpg", "acme", "1800000000")
 	if err != nil {
 		t.Fatalf("sign with upcoming key: %v", err)
 	}
@@ -198,6 +198,7 @@ func TestSelectorSize(t *testing.T) {
 	}{
 		"full":           {"full", 1024, 707, 1024, 707, true},
 		"half crop":      {"c-0.2-0.2-0.5-0.5", 100, 100, 50, 50, true},
+		"crop w/ focus":  {"c-0.2-0.2-0.5-0.5-0.52886-0.33612", 100, 100, 50, 50, true},
 		"inward rounded": {"c-0.198-0.198-0.495-0.495", 100, 100, 49, 49, true},
 		"outside unit":   {"c-0.8-0.8-0.5-0.5", 100, 100, 0, 0, false},
 		"temporal clip":  {"t-0-30", 100, 100, 0, 0, false},

@@ -72,13 +72,8 @@ func BuildURL(
 		return "", fmt.Errorf("invalid extension %q", ext)
 	}
 
-	file := variant
-	if ext != "" {
-		file += "." + ext
-	}
-
 	return strings.TrimSuffix(base.String(), "/") +
-		signing.Prefix(ns, id, version, selector) + file, nil
+		signing.Path(ns, id, version, selector, variant, ext), nil
 }
 
 // ErrNoActiveKey is returned when the key source has no active delivery
@@ -88,12 +83,6 @@ var ErrNoActiveKey = errors.New("no active delivery key")
 
 // ErrNoPublicKey is returned when the key source has no active public key.
 var ErrNoPublicKey = errors.New("no active public key")
-
-// ScopePublic is the scope carried by public (non-expiring) tokens. Public
-// renditions are reachable by any valid signature, so it grants nothing
-// beyond what the exp=0 rule already allows; it labels the public tier in
-// the edge's access logs.
-const ScopePublic = "_public"
 
 // KeysSource provides active signing keys. *KeyProvider implements it;
 // tests can substitute a static source.
@@ -105,8 +94,6 @@ type KeysSource interface {
 type URLSigner struct {
 	// Keys provides the active delivery key.
 	Keys KeysSource
-	// Scope is the access-class scope claim of minted tokens, e.g. "web".
-	Scope string
 	// TTL is the token lifetime. It must stay under the edge's 30-day
 	// cap; a zero TTL defaults to 24 hours.
 	TTL time.Duration
@@ -116,8 +103,8 @@ type URLSigner struct {
 const DefaultTokenTTL = 24 * time.Hour
 
 // SignURL signs a single asset CDN URL for an audience. When signing many
-// URLs for the same audience — variants of one asset share a token — use
-// NewSession to reuse tokens across calls.
+// URLs for the same audience use NewSession to share the expiry and skip
+// re-validating the audience per call.
 func (s *URLSigner) SignURL(rawURL, aud string) (string, error) {
 	sess, err := s.NewSession(aud)
 	if err != nil {
@@ -127,10 +114,10 @@ func (s *URLSigner) SignURL(rawURL, aud string) (string, error) {
 	return sess.SignURL(rawURL)
 }
 
-// NewSession prepares signing for one audience with a fixed expiry.
-// Tokens cover the path prefix up to and including the selector, so all
-// variants and formats of one asset share a token; the session caches
-// them per prefix. A session is not safe for concurrent use.
+// NewSession prepares signing for one audience with a fixed expiry. Each
+// rendition URL gets its own token — the signature covers the full path —
+// and repeated signings of the same URL are cached. A session is not safe
+// for concurrent use.
 func (s *URLSigner) NewSession(aud string) (*SignSession, error) {
 	if !audiencePattern.MatchString(aud) {
 		return nil, fmt.Errorf("invalid audience %q", aud)
@@ -151,25 +138,23 @@ func (s *URLSigner) NewSession(aud string) (*SignSession, error) {
 	return &SignSession{
 		signer: signer,
 		aud:    aud,
-		scope:  s.Scope,
 		exp:    strconv.FormatInt(now.Add(ttl).Unix(), 10),
 		tokens: make(map[string]string),
 	}, nil
 }
 
-// SignSession signs URLs for one audience with a shared expiry, reusing
-// tokens across URLs that share a signed prefix.
+// SignSession signs URLs for one audience with a shared expiry, caching
+// tokens per signed path.
 type SignSession struct {
 	signer *signing.Signer
 	aud    string
-	scope  string
 	exp    string
 	tokens map[string]string
 }
 
-// SignURL parses an unsigned asset CDN URL, signs its path prefix, and
-// returns the URL with the token in the `s` query parameter. The host is
-// opaque, but the URL path must be the asset path
+// SignURL parses an unsigned asset CDN URL, signs its path, and returns
+// the URL with the token in the `s` query parameter. The host is opaque,
+// but the URL path must be the asset path
 // `/v1/{ns}/{id}/{version}/{selector}/{variant}.{ext}` — the URL
 // contract puts it at the root of whatever host serves the CDN.
 func (s *SignSession) SignURL(rawURL string) (string, error) {
@@ -178,24 +163,16 @@ func (s *SignSession) SignURL(rawURL string) (string, error) {
 		return "", fmt.Errorf("parse URL: %w", err)
 	}
 
-	cut := strings.LastIndex(u.Path, "/")
-	if cut == -1 || cut == len(u.Path)-1 {
-		return "", fmt.Errorf(
-			"URL path %q does not end in a variant segment", u.Path)
-	}
-
-	// The prefix shape, /v1/ at the root included, is validated by
-	// SignPrefix.
-	prefix := u.Path[:cut+1]
-
-	token, ok := s.tokens[prefix]
+	// The path shape, /v1/ at the root included, is validated by
+	// SignPath.
+	token, ok := s.tokens[u.Path]
 	if !ok {
-		minted, err := s.signer.SignPrefix(prefix, s.aud, s.scope, s.exp)
+		minted, err := s.signer.SignPath(u.Path, s.aud, s.exp)
 		if err != nil {
-			return "", fmt.Errorf("sign prefix: %w", err)
+			return "", fmt.Errorf("sign path: %w", err)
 		}
 
-		s.tokens[prefix] = minted
+		s.tokens[u.Path] = minted
 		token = minted
 	}
 
@@ -233,8 +210,8 @@ func (s *PublicSigner) SignURL(rawURL, aud string) (string, error) {
 }
 
 // NewSession prepares public signing for one audience. Tokens are
-// non-expiring and carry the _public scope; the session caches them per
-// signed prefix like the delivery session. Not safe for concurrent use.
+// non-expiring; the session caches them per signed path like the
+// delivery session. Not safe for concurrent use.
 func (s *PublicSigner) NewSession(aud string) (*SignSession, error) {
 	if !audiencePattern.MatchString(aud) {
 		return nil, fmt.Errorf("invalid audience %q", aud)
@@ -248,7 +225,6 @@ func (s *PublicSigner) NewSession(aud string) (*SignSession, error) {
 	return &SignSession{
 		signer: signer,
 		aud:    aud,
-		scope:  ScopePublic,
 		exp:    signing.ExpNever,
 		tokens: make(map[string]string),
 	}, nil

@@ -155,9 +155,10 @@ func (p *Provider) fetchVariants(
 			Name:    v.Name,
 			Kind:    v.Kind,
 			Max:     int(v.Max),
+			Width:   int(v.Width),
+			Height:  int(v.Height),
 			Fit:     v.Fit,
 			Public:  v.Public,
-			Scopes:  v.Scopes,
 			Classes: v.Classes,
 		}
 	}

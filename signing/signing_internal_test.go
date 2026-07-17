@@ -10,9 +10,8 @@ import (
 var testKey = []byte("0123456789abcdef0123456789abcdef")
 
 const (
-	testNS    = "repo"
-	testAud   = "acme"
-	testScope = "web"
+	testNS  = "repo"
+	testAud = "acme"
 )
 
 func TestSignImageURL(t *testing.T) {
@@ -21,26 +20,25 @@ func TestSignImageURL(t *testing.T) {
 	exp := time.Unix(1800000000, 0)
 
 	token, err := signer.SignImageURL(
-		testNS, "0a1b2c3d", "4", FullCrop, testAud, testScope, exp)
+		testNS, "0a1b2c3d", "4", FullCrop, "large", "jpg", testAud, exp)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
 
 	parts := strings.Split(token, ".")
-	if len(parts) != 6 {
-		t.Fatalf("expected 6 token fields, got %d: %q", len(parts), token)
+	if len(parts) != 5 {
+		t.Fatalf("expected 5 token fields, got %d: %q", len(parts), token)
 	}
 
 	if parts[0] != "1" || parts[1] != "2026a" ||
-		parts[2] != "1800000000" || parts[3] != testAud ||
-		parts[4] != testScope {
+		parts[2] != "1800000000" || parts[3] != testAud {
 		t.Errorf("unexpected token fields: %q", token)
 	}
 
 	want := MAC(testKey, Canonical(
-		"/v1/repo/0a1b2c3d/4/full/", "1800000000", testAud, testScope))
-	if parts[5] != want {
-		t.Errorf("MAC mismatch: got %q, want %q", parts[5], want)
+		"/v1/repo/0a1b2c3d/4/full/large.jpg", "1800000000", testAud))
+	if parts[4] != want {
+		t.Errorf("MAC mismatch: got %q, want %q", parts[4], want)
 	}
 }
 
@@ -48,13 +46,32 @@ func TestSignImageURLNonExpiring(t *testing.T) {
 	signer := NewSigner("pub2026a", testKey)
 
 	token, err := signer.SignImageURL(
-		"mm", "abc", "0", FullCrop, "public", "wm", time.Time{})
+		"mm", "abc", "0", FullCrop, "preview-wm", "jpg", "public",
+		time.Time{})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
 
-	if !strings.HasPrefix(token, "1.pub2026a.0.public.wm.") {
+	if !strings.HasPrefix(token, "1.pub2026a.0.public.") {
 		t.Errorf("expected exp=0 token, got %q", token)
+	}
+}
+
+func TestSignImageURLOriginal(t *testing.T) {
+	signer := NewSigner("2026a", testKey)
+
+	exp := time.Unix(1800000000, 0)
+
+	token, err := signer.SignImageURL(
+		testNS, "0a1b2c3d", "4", FullCrop, "original", "", testAud, exp)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	want := MAC(testKey, Canonical(
+		"/v1/repo/0a1b2c3d/4/full/original", "1800000000", testAud))
+	if !strings.HasSuffix(token, "."+want) {
+		t.Errorf("MAC mismatch in %q", token)
 	}
 }
 
@@ -98,16 +115,19 @@ func TestSignValidation(t *testing.T) {
 
 	exp := time.Unix(1800000000, 0)
 
-	cases := map[string][5]string{
-		"bad audience":  {testNS, "id", "1", "ACME", testScope},
-		"empty scope":   {testNS, "id", "1", testAud, ""},
-		"bad id":        {testNS, "id/../x", "1", testAud, testScope},
-		"empty version": {testNS, "id", "", testAud, testScope},
+	// ns, id, version, variant, ext, aud
+	cases := map[string][6]string{
+		"bad audience":  {testNS, "id", "1", "large", "jpg", "ACME"},
+		"bad id":        {testNS, "id/../x", "1", "large", "jpg", testAud},
+		"empty version": {testNS, "id", "", "large", "jpg", testAud},
+		"bad variant":   {testNS, "id", "1", "Large", "jpg", testAud},
+		"bad extension": {testNS, "id", "1", "large", "JPG", testAud},
+		"empty variant": {testNS, "id", "1", "", "jpg", testAud},
 	}
 
 	for name, c := range cases {
 		_, err := signer.SignImageURL(
-			c[0], c[1], c[2], FullCrop, c[3], c[4], exp)
+			c[0], c[1], c[2], FullCrop, c[3], c[4], c[5], exp)
 		if err == nil {
 			t.Errorf("%s: expected an error", name)
 		}

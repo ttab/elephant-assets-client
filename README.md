@@ -9,10 +9,10 @@ The asset CDN serves signed URLs of the shape
 {base URL}/v1/{ns}/{id}/{version}/{selector}/{variant}.{ext}?s={token}
 ```
 
-where the token is an HMAC over the asset path prefix up to and including
-the selector — one token authorizes every variant its scope permits for
-that exact asset version and selection. See the asset CDN specification
-in the elephant-assets repository for the full contract.
+where the token is an HMAC over the full asset path — a token authorizes
+exactly one rendition of one asset version and selection; access control
+is the minting decision itself. See the asset CDN specification in the
+elephant-assets repository for the full contract.
 
 The host is arbitrary — the client makes no assumptions about the CDN's
 domain structure. The asset path always sits at the root of the host:
@@ -37,7 +37,7 @@ the base URL is just scheme, host, and optional port, and only the
   - `BuildURL` composes unsigned asset CDN URLs from address variables,
     validated against the edge grammar.
   - `URLSigner`/`SignSession` mint delivery tokens for unsigned URLs,
-    reusing tokens across variants that share a signed prefix.
+    one token per rendition URL, cached per signed path.
 
 ## Usage
 
@@ -46,9 +46,8 @@ provider := assetsclient.NewProvider(endpoint, authClient)
 go provider.Run(ctx)
 
 signer := assetsclient.URLSigner{
-	Keys:  provider,
-	Scope: "web",
-	TTL:   24 * time.Hour,
+	Keys: provider,
+	TTL:  24 * time.Hour,
 }
 
 sess, err := signer.NewSession("customer-slug")
